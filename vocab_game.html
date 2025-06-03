@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>영어 단어 학습 게임</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        .game { margin-bottom: 40px; }
+        button { margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>영어 단어 학습 게임</h1>
+
+    <!-- 영어 단어 맞추기 게임 -->
+    <div class="game">
+        <h2>1. 영어 단어 맞추기 게임 (영어 → 뜻 선택)</h2>
+        <p id="english-word"></p>
+        <div id="options"></div>
+        <p id="result1"></p>
+        <button onclick="nextWord()">다음 문제</button>
+    </div>
+
+    <!-- 뜻 쓰기 게임 -->
+    <div class="game">
+        <h2>2. 뜻 쓰기 게임 (뜻 → 영어 쓰기)</h2>
+        <p id="meaning-word"></p>
+        <input type="text" id="answer-input" placeholder="영어 단어 입력">
+        <button onclick="checkAnswer()">확인</button>
+        <p id="result2"></p>
+        <button onclick="nextMeaning()">다음 문제</button>
+    </div>
+
+    <script>
+        const words = [
+            { word: "manipulation", meaning: "교묘한 처리, 솜씨 있는 취급, 조작" },
+            { word: "perhaps", meaning: "아마도, 어쩌면" },
+            { word: "concentrate", meaning: "집중하다" },
+            { word: "relevant to", meaning: "~에 관련된" },
+            { word: "limitation", meaning: "제한, 한도, 한계" },
+            { word: "monologue", meaning: "독백" },
+            { word: "scrape", meaning: "긁어내다" },
+            { word: "liberate", meaning: "자유롭게 하다" },
+            { word: "preliminary", meaning: "예비의, 준비의" },
+            { word: "investment", meaning: "투자" },
+            { word: "sociology", meaning: "사회학" },
+            { word: "reaction", meaning: "반작용, 반동" },
+            { word: "priority", meaning: "우선권, 우선순위" },
+            { word: "barrier", meaning: "장벽, 장애물" },
+            { word: "livestock", meaning: "가축" },
+            { word: "bumbler", meaning: "실수하는 사람" },
+            { word: "attuned", meaning: "익숙한, 적절히 대응하는" },
+            { word: "paralyze", meaning: "마비시키다" },
+            { word: "immense", meaning: "엄청난" },
+            { word: "emit", meaning: "내뿜다" },
+            { word: "be shaped like", meaning: "~의 형태를 하고 있다" },
+            { word: "dimension", meaning: "(공간) 크기, 치수" },
+            { word: "barometer", meaning: "기압계" },
+            { word: "intermediate", meaning: "중간의" },
+            { word: "tariff", meaning: "관세" },
+            { word: "symmetry", meaning: "대칭" },
+            { word: "diminish", meaning: "줄어들다" },
+            { word: "minority", meaning: "소수" },
+            { word: "obliged to", meaning: "~에게 감사하는" },
+            { word: "treadmill", meaning: "러닝머신" },
+            { word: "permanence", meaning: "영속성" },
+            { word: "psychological", meaning: "심리학의, 정신적인" },
+            { word: "illiterate", meaning: "글을 모르는" },
+            { word: "masterpiece", meaning: "걸작, 명작" },
+            { word: "monument", meaning: "기념물" }
+        ];
+
+        let currentWordIndex1 = 0;
+        let currentWordIndex2 = 0;
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // 영어 단어 맞추기 게임
+        function nextWord() {
+            const wordObj = words[currentWordIndex1];
+            document.getElementById("english-word").textContent = `단어: ${wordObj.word}`;
+
+            // 보기 만들기
+            let options = shuffle([...words]).slice(0, 3); // 보기 3개
+            if (!options.find(item => item.meaning === wordObj.meaning)) {
+                options.push(wordObj);
+            }
+            shuffle(options);
+
+            const optionsDiv = document.getElementById("options");
+            optionsDiv.innerHTML = "";
+            options.forEach(option => {
+                const button = document.createElement("button");
+                button.textContent = option.meaning;
+                button.onclick = () => {
+                    if (option.meaning === wordObj.meaning) {
+                        document.getElementById("result1").textContent = "정답!";
+                    } else {
+                        document.getElementById("result1").textContent = "오답!";
+                    }
+                };
+                optionsDiv.appendChild(button);
+            });
+
+            currentWordIndex1 = (currentWordIndex1 + 1) % words.length;
+            document.getElementById("result1").textContent = "";
+        }
+
+        // 뜻 쓰기 게임
+        function nextMeaning() {
+            const wordObj = words[currentWordIndex2];
+            document.getElementById("meaning-word").textContent = `뜻: ${wordObj.meaning}`;
+            document.getElementById("answer-input").value = "";
+            document.getElementById("result2").textContent = "";
+            currentWordIndex2 = (currentWordIndex2 + 1) % words.length;
+        }
+
+        function checkAnswer() {
+            const input = document.getElementById("answer-input").value.trim().toLowerCase();
+            const currentMeaning = document.getElementById("meaning-word").textContent.replace("뜻: ", "").trim();
+            const correctWord = words.find(w => w.meaning === currentMeaning).word;
+            if (input === correctWord) {
+                document.getElementById("result2").textContent = "정답!";
+            } else {
+                document.getElementById("result2").textContent = `오답! 정답은 "${correctWord}"`;
+            }
+        }
+
+        // 첫 문제 보여주기
+        nextWord();
+        nextMeaning();
+    </script>
+</body>
+</html>
