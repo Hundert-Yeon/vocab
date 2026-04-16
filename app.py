@@ -40,13 +40,12 @@ COLS  = 5
 ROWS  = TOTAL // COLS
 
 
-# ── 세션 초기화 ───────────────────────────────────────────────────────────────
 def init_state():
     defaults = {
         "broken":        [False] * TOTAL,
-        "selected":      None,
         "feedback":      "",
         "feedback_type": None,
+        "last_broken":   None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -55,49 +54,33 @@ def init_state():
 
 def reset_game():
     st.session_state.broken        = [False] * TOTAL
-    st.session_state.selected      = None
     st.session_state.feedback      = ""
     st.session_state.feedback_type = None
+    st.session_state.last_broken   = None
 
 
-def normalize(s: str) -> str:
+def normalize(s):
     return s.strip().replace(" ", "")
 
 
-def check_answer(idx: int, user_input: str) -> bool:
-    return normalize(user_input) in [normalize(a) for a in WORDS[idx]["answers"]]
-
-
-def select_brick(i: int):
-    if st.session_state.broken[i]:
-        return
-    st.session_state.selected      = i
-    st.session_state.feedback      = ""
-    st.session_state.feedback_type = None
-
-
-def submit_answer(raw: str):
-    sel = st.session_state.selected
-    if sel is None:
-        st.session_state.feedback      = "⚠️ 먼저 단어 벽돌을 클릭하세요!"
-        st.session_state.feedback_type = "info"
-        return
-    inp = raw.strip()
+def find_and_break(raw):
+    inp = normalize(raw)
     if not inp:
         return
-    if check_answer(sel, inp):
-        word = WORDS[sel]["en"]
-        st.session_state.broken[sel]   = True
-        st.session_state.selected      = None
-        st.session_state.feedback      = f"✅  정답!  '{word}' 벽돌이 깨졌어요!"
-        st.session_state.feedback_type = "correct"
-    else:
-        # 선택 유지 — selected를 초기화하지 않음
-        st.session_state.feedback      = "❌  틀렸어요. 다시 시도해보세요!"
-        st.session_state.feedback_type = "wrong"
+    for i, w in enumerate(WORDS):
+        if st.session_state.broken[i]:
+            continue
+        if inp in [normalize(a) for a in w["answers"]]:
+            st.session_state.broken[i]     = True
+            st.session_state.last_broken   = i
+            st.session_state.feedback      = f"✅  정답!  '{w['en']}' 벽돌이 깨졌어요!"
+            st.session_state.feedback_type = "correct"
+            return
+    st.session_state.last_broken   = None
+    st.session_state.feedback      = f"❌  '{raw.strip()}'은(는) 해당하는 단어가 없어요!"
+    st.session_state.feedback_type = "wrong"
 
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
 GLOBAL_CSS = """
 <style>
 .stApp { background: #f0f4f8; }
@@ -116,31 +99,25 @@ h1 { font-size: 24px !important; font-weight: 800 !important; color: #1e293b !im
 .pw { background: #e2e8f0; border-radius: 100px; height: 9px; overflow: hidden; margin-bottom: 14px; }
 .pi { height: 100%; border-radius: 100px; background: #22c55e; transition: width .4s ease; }
 
-.sel-label {
-    font-size: 13px; font-weight: 700; color: #4f46e5;
-    margin: 0 0 6px; padding: 7px 12px;
+.guide {
+    font-size: 13px; color: #4f46e5; font-weight: 600;
+    margin: 0 0 8px; padding: 7px 12px;
     background: #eef2ff; border-radius: 8px;
     border-left: 3px solid #4f46e5;
 }
-.no-sel-label { font-size: 13px; color: #94a3b8; margin: 0 0 6px; }
 
 .fb { border-radius: 9px; padding: 8px 14px; font-weight: 600; font-size: 13px; margin: 6px 0 4px; }
 .fb-correct { background:#f0fdf4; border:1px solid #86efac; color:#15803d; }
 .fb-wrong   { background:#fff1f2; border:1px solid #fca5a5; color:#b91c1c; }
-.fb-info    { background:#fffbeb; border:1px solid #fcd34d; color:#92400e; }
 
-/* 폼 배경 제거 */
 div[data-testid="stForm"] { background: transparent !important; border: none !important; padding: 0 !important; }
 
-/* 텍스트 인풋 */
 div[data-testid="stTextInput"] input {
     border-radius: 9px !important;
     border: 1.5px solid #93c5fd !important;
     font-size: 15px !important;
     height: 42px;
 }
-
-/* 확인 버튼 */
 div[data-testid="stFormSubmitButton"] button {
     background: #1d4ed8 !important; color: white !important;
     border: none !important; border-radius: 9px !important;
@@ -148,11 +125,7 @@ div[data-testid="stFormSubmitButton"] button {
     height: 42px; width: 100%;
 }
 div[data-testid="stFormSubmitButton"] button:hover { background: #1e40af !important; }
-
-/* 일반 버튼 */
-div[data-testid="stButton"] button {
-    border-radius: 9px !important; font-weight: 600 !important;
-}
+div[data-testid="stButton"] button { border-radius: 9px !important; font-weight: 600 !important; }
 
 .done-banner {
     background: linear-gradient(135deg,#4f46e5,#7c3aed);
@@ -165,30 +138,26 @@ div[data-testid="stButton"] button {
 """
 
 
-# ── 벽돌 그리드 HTML ──────────────────────────────────────────────────────────
-def brick_grid_html(broken, selected) -> tuple[str, int]:
+def brick_grid_html(broken, last_broken):
     cell_h = 62
     grid_h = ROWS * cell_h + 6
 
     cells = []
     for i, w in enumerate(WORDS):
         if broken[i]:
-            cls   = "b brk"
-            label = f"✓ {w['en']}"
-            onclick = ""
-        elif selected == i:
-            cls   = "b sel"
-            label = w["en"]
-            onclick = ""          # 이미 선택됨 — 클릭 무시
+            extra = " new" if i == last_broken else ""
+            cells.append(f'<div class="b brk{extra}">✓ {w["en"]}</div>')
         else:
-            cls   = "b"
-            label = w["en"]
-            onclick = f' onclick="pick({i})"'
-        cells.append(f'<div class="{cls}"{onclick}>{label}</div>')
+            cells.append(f'<div class="b">{w["en"]}</div>')
 
     html = f"""
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;}}
+@keyframes pulse{{
+  0%{{transform:scale(1);background:#dcfce7;}}
+  40%{{transform:scale(1.09);background:#86efac;}}
+  100%{{transform:scale(1);background:#dcfce7;}}
+}}
 .grid{{
     display:grid;
     grid-template-columns:repeat({COLS},1fr);
@@ -206,69 +175,39 @@ def brick_grid_html(broken, selected) -> tuple[str, int]:
     text-align:center;line-height:1.3;
     padding:6px 4px;
     border:1px solid #bfdbfe;
-    cursor:pointer;
     background:#dbeafe;
     color:#1e40af;
-    transition:background .1s;
     user-select:none;
-}}
-.b:hover{{background:#bfdbfe;}}
-.sel{{
-    background:#4f46e5!important;
-    color:white!important;
-    border-color:#4338ca!important;
-    box-shadow:inset 0 0 0 2px #a5b4fc;
-    cursor:default;
 }}
 .brk{{
     background:#dcfce7!important;
     color:#166534!important;
     border-color:#86efac!important;
-    opacity:.72;
-    cursor:default!important;
+    opacity:.75;
     font-weight:600!important;
 }}
-.brk:hover{{background:#dcfce7!important;}}
+.brk.new{{
+    opacity:1;
+    animation:pulse .55s ease;
+}}
 </style>
 <div class="grid">{''.join(cells)}</div>
-<script>
-function pick(i){{
-    const u=new URL(window.parent.location.href);
-    u.searchParams.set('sel',i);
-    window.parent.location.href=u.toString();
-}}
-</script>
 """
     return html, grid_h
 
 
-# ── 메인 ──────────────────────────────────────────────────────────────────────
 def main():
     st.set_page_config(page_title="영어 단어 벽돌깨기", page_icon="🧱", layout="centered")
     init_state()
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
-    # ── query param 수신 (벽돌 클릭) — rerun 전에 처리 ──
-    params = st.query_params
-    if "sel" in params:
-        try:
-            idx = int(params["sel"])
-            if 0 <= idx < TOTAL and not st.session_state.broken[idx]:
-                select_brick(idx)
-        except ValueError:
-            pass
-        st.query_params.clear()
-        st.rerun()
-
     broken_count = sum(st.session_state.broken)
     score        = round((broken_count / TOTAL) * 100)
     game_done    = broken_count == TOTAL
 
-    # ── 타이틀 ──
     st.title("🧱 영어 단어 벽돌깨기")
-    st.caption("파란 벽돌 클릭 → 한국어 뜻 입력 → 맞추면 벽돌이 깨져요!")
+    st.caption("한국어 뜻을 입력하면 해당 단어 벽돌이 자동으로 깨져요!")
 
-    # ── 점수판 ──
     st.markdown(f"""
     <div class="scoreboard">
       <div class="sc">
@@ -287,7 +226,6 @@ def main():
     <div class="pw"><div class="pi" style="width:{score}%"></div></div>
     """, unsafe_allow_html=True)
 
-    # ── 완료 화면 ──
     if game_done:
         st.markdown("""
         <div class="done-banner">
@@ -299,39 +237,28 @@ def main():
             st.rerun()
         return
 
-    # ── 선택 안내 ──
-    sel = st.session_state.selected
-    if sel is not None:
-        st.markdown(
-            f'<div class="sel-label">▶ 선택된 단어: {WORDS[sel]["en"]} — 아래에 한국어 뜻을 입력하세요</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            '<div class="no-sel-label">파란 벽돌을 클릭하세요</div>',
-            unsafe_allow_html=True,
-        )
+    st.markdown(
+        '<div class="guide">💡 한국어 뜻을 입력하면 맞는 벽돌이 자동으로 깨집니다. 벽돌을 클릭하지 않아도 돼요!</div>',
+        unsafe_allow_html=True,
+    )
 
-    # ── 입력 폼 (key 고정 — rerun해도 selected 유지됨) ──
     with st.form(key="answer_form", clear_on_submit=True):
         c1, c2 = st.columns([5, 1])
         with c1:
             user_input = st.text_input(
                 "답",
-                placeholder="한국어 뜻 입력 후 Enter 또는 확인",
+                placeholder="한국어 뜻 입력 후 Enter 또는 확인  (예: 능숙함, 접근하다 …)",
                 label_visibility="collapsed",
             )
         with c2:
             submitted = st.form_submit_button("확인 ✓", use_container_width=True)
 
     if submitted:
-        submit_answer(user_input)
+        find_and_break(user_input)
         st.rerun()
 
-    # ── 피드백 ──
     if st.session_state.feedback:
-        cls_map = {"correct": "fb-correct", "wrong": "fb-wrong", "info": "fb-info"}
-        cls = cls_map.get(st.session_state.feedback_type, "fb-info")
+        cls = "fb-correct" if st.session_state.feedback_type == "correct" else "fb-wrong"
         st.markdown(
             f'<div class="fb {cls}">{st.session_state.feedback}</div>',
             unsafe_allow_html=True,
@@ -339,11 +266,9 @@ def main():
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-    # ── 벽돌 그리드 (입력창 아래에 배치) ──
-    html_str, grid_h = brick_grid_html(st.session_state.broken, st.session_state.selected)
+    html_str, grid_h = brick_grid_html(st.session_state.broken, st.session_state.last_broken)
     components.html(html_str, height=grid_h, scrolling=False)
 
-    # ── 초기화 ──
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     if st.button("🔄 초기화"):
         reset_game()
