@@ -1,7 +1,7 @@
 import streamlit as st
-import random
+import streamlit.components.v1 as components
 
-# ── 단어 데이터 ──────────────────────────────────────────────
+# ── 단어 데이터 ───────────────────────────────────────────────────────────────
 WORDS = [
     {"en": "proficiency",   "answers": ["능숙함","숙달","구사능력","능숙"]},
     {"en": "approach",      "answers": ["접근하다","접근","가까워지다","다가가다"]},
@@ -36,369 +36,323 @@ WORDS = [
 ]
 
 TOTAL = len(WORDS)
+COLS  = 5
+ROWS  = TOTAL // COLS  # 6
 
-# ── 세션 초기화 ──────────────────────────────────────────────
+
+# ── 세션 초기화 ───────────────────────────────────────────────────────────────
 def init_state():
-    if "broken" not in st.session_state:
-        st.session_state.broken = [False] * TOTAL
-    if "selected" not in st.session_state:
-        st.session_state.selected = None
-    if "feedback" not in st.session_state:
-        st.session_state.feedback = ""
-    if "feedback_ok" not in st.session_state:
-        st.session_state.feedback_ok = None
-    if "answer_input" not in st.session_state:
-        st.session_state.answer_input = ""
-    if "input_key" not in st.session_state:
-        st.session_state.input_key = 0
+    defaults = {
+        "broken":        [False] * TOTAL,
+        "selected":      None,
+        "feedback":      "",
+        "feedback_type": None,
+        "input_key":     0,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
 
 def reset_game():
-    st.session_state.broken = [False] * TOTAL
-    st.session_state.selected = None
-    st.session_state.feedback = ""
-    st.session_state.feedback_ok = None
-    st.session_state.answer_input = ""
-    st.session_state.input_key += 1
+    st.session_state.broken        = [False] * TOTAL
+    st.session_state.selected      = None
+    st.session_state.feedback      = ""
+    st.session_state.feedback_type = None
+    st.session_state.input_key    += 1
+
 
 def normalize(s: str) -> str:
     return s.strip().replace(" ", "")
 
+
 def check_answer(idx: int, user_input: str) -> bool:
     return normalize(user_input) in [normalize(a) for a in WORDS[idx]["answers"]]
 
-def select_brick(idx: int):
-    if st.session_state.broken[idx]:
-        return
-    st.session_state.selected = idx
-    st.session_state.feedback = ""
-    st.session_state.feedback_ok = None
-    st.session_state.answer_input = ""
-    st.session_state.input_key += 1
 
-def submit_answer():
-    inp = st.session_state.answer_input.strip()
+def select_brick(i: int):
+    if st.session_state.broken[i]:
+        return
+    st.session_state.selected      = i
+    st.session_state.feedback      = ""
+    st.session_state.feedback_type = None
+    st.session_state.input_key    += 1
+
+
+def submit_answer(raw: str):
     sel = st.session_state.selected
     if sel is None:
-        st.session_state.feedback = "⚠️ 먼저 단어 벽돌을 클릭하세요!"
-        st.session_state.feedback_ok = None
+        st.session_state.feedback      = "⚠️ 먼저 단어 벽돌을 클릭하세요!"
+        st.session_state.feedback_type = "info"
         return
+    inp = raw.strip()
     if not inp:
         return
     if check_answer(sel, inp):
-        st.session_state.broken[sel] = True
-        st.session_state.selected = None
-        st.session_state.feedback = f"✅ 정답! '{WORDS[sel]['en']}' 벽돌이 깨졌어요!"
-        st.session_state.feedback_ok = True
+        word                           = WORDS[sel]["en"]
+        st.session_state.broken[sel]   = True
+        st.session_state.selected      = None
+        st.session_state.feedback      = f"✅  정답!  '{word}' 벽돌이 깨졌어요!"
+        st.session_state.feedback_type = "correct"
     else:
-        st.session_state.feedback = "❌ 틀렸어요. 다시 시도해보세요!"
-        st.session_state.feedback_ok = False
-    st.session_state.answer_input = ""
+        st.session_state.feedback      = "❌  틀렸어요. 다시 시도해보세요!"
+        st.session_state.feedback_type = "wrong"
     st.session_state.input_key += 1
 
-# ── CSS ─────────────────────────────────────────────────────
-def inject_css():
-    st.markdown("""
-    <style>
-    /* 전체 배경 */
-    .stApp { background-color: #f8f9fb; }
 
-    /* 점수판 */
-    .score-card {
-        background: white;
-        border-radius: 14px;
-        padding: 16px 24px;
-        border: 1px solid #e2e8f0;
-        text-align: center;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    }
-    .score-num { font-size: 32px; font-weight: 700; color: #1a56db; }
-    .score-label { font-size: 13px; color: #64748b; margin-top: 2px; }
+# ── 전역 CSS ──────────────────────────────────────────────────────────────────
+GLOBAL_CSS = """
+<style>
+/* 앱 배경 */
+.stApp { background: #f0f4f8; }
+section[data-testid="stMain"] > div { padding-top: 1.2rem; }
 
-    /* 벽돌 버튼 */
-    div[data-testid="stButton"] > button {
-        width: 100%;
-        min-height: 56px;
-        font-size: 13px;
-        font-weight: 600;
-        border-radius: 10px;
-        border: 2px solid #93c5fd;
-        background-color: #dbeafe;
-        color: #1e40af;
-        transition: all 0.15s;
-        white-space: normal;
-        line-height: 1.3;
-        padding: 6px 4px;
-    }
-    div[data-testid="stButton"] > button:hover {
-        background-color: #bfdbfe;
-        border-color: #3b82f6;
-        transform: scale(1.03);
-    }
+/* 타이틀 */
+h1 { font-size: 24px !important; font-weight: 800 !important; color: #1e293b !important; }
 
-    /* 깨진 벽돌 */
-    .broken-brick {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 56px;
-        font-size: 13px;
-        font-weight: 600;
-        border-radius: 10px;
-        border: 2px solid #86efac;
-        background-color: #dcfce7;
-        color: #166534;
-        opacity: 0.65;
-        text-align: center;
-        line-height: 1.3;
-        padding: 6px 4px;
-    }
+/* 점수 카드 행 */
+.scoreboard { display: flex; gap: 10px; margin: 14px 0 10px; }
+.sc {
+    flex: 1; background: white;
+    border-radius: 12px; padding: 12px 8px;
+    text-align: center; border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.sc .n { font-size: 26px; font-weight: 800; color: #1d4ed8; line-height: 1.1; }
+.sc .l { font-size: 11px; color: #94a3b8; margin-top: 2px; }
 
-    /* 선택된 벽돌 강조 */
-    .selected-brick {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 56px;
-        font-size: 13px;
-        font-weight: 700;
-        border-radius: 10px;
-        border: 2px solid #7c3aed;
-        background-color: #7c3aed;
-        color: white;
-        text-align: center;
-        line-height: 1.3;
-        padding: 6px 4px;
-        box-shadow: 0 0 0 3px #c4b5fd;
-    }
+/* 진행바 */
+.pw { background: #e2e8f0; border-radius: 100px; height: 9px; overflow: hidden; margin-bottom: 14px; }
+.pi { height: 100%; border-radius: 100px; background: #22c55e; transition: width .4s ease; }
 
-    /* 피드백 */
-    .fb-correct {
-        background: #f0fdf4;
-        border: 1px solid #86efac;
-        border-radius: 10px;
-        padding: 10px 16px;
-        color: #15803d;
-        font-weight: 600;
-        font-size: 15px;
-        text-align: center;
-    }
-    .fb-wrong {
-        background: #fff1f2;
-        border: 1px solid #fca5a5;
-        border-radius: 10px;
-        padding: 10px 16px;
-        color: #b91c1c;
-        font-weight: 600;
-        font-size: 15px;
-        text-align: center;
-    }
-    .fb-info {
-        background: #fffbeb;
-        border: 1px solid #fcd34d;
-        border-radius: 10px;
-        padding: 10px 16px;
-        color: #92400e;
-        font-weight: 600;
-        font-size: 15px;
-        text-align: center;
-    }
+/* 피드백 */
+.fb { border-radius: 9px; padding: 8px 14px; font-weight: 600; font-size: 13px; margin-bottom: 10px; }
+.fb-correct { background:#f0fdf4; border:1px solid #86efac; color:#15803d; }
+.fb-wrong   { background:#fff1f2; border:1px solid #fca5a5; color:#b91c1c; }
+.fb-info    { background:#fffbeb; border:1px solid #fcd34d; color:#92400e; }
 
-    /* 완료 배너 */
-    .complete-banner {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 16px;
-        padding: 32px;
-        text-align: center;
-        color: white;
-        margin: 16px 0;
-    }
-    .complete-banner h2 { font-size: 28px; margin-bottom: 8px; }
-    .complete-banner p  { font-size: 16px; opacity: 0.9; }
+/* 입력 폼 정렬 */
+div[data-testid="stForm"] { background: transparent; border: none; padding: 0; }
 
-    /* 진행바 */
-    .progress-wrap {
-        background: #e2e8f0;
-        border-radius: 100px;
-        height: 12px;
-        overflow: hidden;
-        margin: 8px 0;
-    }
-    .progress-inner {
-        height: 100%;
-        border-radius: 100px;
-        background: #1d9e75;
-        transition: width 0.4s ease;
-    }
+/* 확인 버튼 */
+div[data-testid="stFormSubmitButton"] button {
+    background: #1d4ed8 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 9px !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    height: 42px;
+}
+div[data-testid="stFormSubmitButton"] button:hover {
+    background: #1e40af !important;
+}
 
-    /* 입력창 */
-    .stTextInput input {
-        border-radius: 10px;
-        border: 1.5px solid #93c5fd;
-        font-size: 16px;
-        padding: 10px 14px;
-    }
-    .stTextInput input:focus {
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 2px #bfdbfe;
-    }
+/* 텍스트 인풋 */
+div[data-testid="stTextInput"] input {
+    border-radius: 9px !important;
+    border: 1.5px solid #93c5fd !important;
+    font-size: 15px !important;
+    height: 42px;
+}
 
-    /* 제출 버튼 */
-    .submit-btn > div[data-testid="stButton"] > button {
-        background-color: #1a56db !important;
-        border-color: #1a56db !important;
-        color: white !important;
-        font-weight: 700;
-        font-size: 15px;
-        border-radius: 10px;
-        padding: 10px 24px;
-    }
-    .submit-btn > div[data-testid="stButton"] > button:hover {
-        background-color: #1e40af !important;
-    }
+/* 초기화·다시하기 버튼 */
+div[data-testid="stButton"] button {
+    border-radius: 9px !important;
+    font-weight: 600 !important;
+}
 
-    /* 타이틀 */
-    h1 { color: #1e293b !important; }
-    </style>
-    """, unsafe_allow_html=True)
+/* 완료 배너 */
+.done-banner {
+    background: linear-gradient(135deg,#4f46e5,#7c3aed);
+    border-radius: 16px; padding: 28px;
+    text-align: center; color: white; margin: 8px 0 18px;
+}
+.done-banner h2 { font-size: 24px; margin-bottom: 6px; font-weight: 800; }
+.done-banner p  { font-size: 14px; opacity: .9; }
+</style>
+"""
 
-# ── 메인 ────────────────────────────────────────────────────
+# ── 벽돌 그리드 (iframe-free inline HTML + JS → query param) ─────────────────
+def brick_grid_html(broken, selected) -> str:
+    cell_h = 60          # px per brick row
+    grid_h = ROWS * cell_h + 4
+
+    cells = []
+    for i, w in enumerate(WORDS):
+        if broken[i]:
+            cls   = "b brk"
+            label = f"✓ {w['en']}"
+        elif selected == i:
+            cls   = "b sel"
+            label = w["en"]
+        else:
+            cls   = "b"
+            label = w["en"]
+        cells.append(
+            f'<div class="{cls}" onclick="pick({i})">{label}</div>'
+        )
+
+    html = f"""
+<style>
+.grid {{
+    display: grid;
+    grid-template-columns: repeat({COLS}, 1fr);
+    gap: 0;
+    border-radius: 13px;
+    overflow: hidden;
+    border: 2px solid #bfdbfe;
+    box-shadow: 0 2px 8px rgba(0,0,0,.09);
+    font-family: -apple-system, sans-serif;
+}}
+.b {{
+    min-height: {cell_h}px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    text-align: center; line-height: 1.3;
+    padding: 6px 4px;
+    border: 1px solid #bfdbfe;
+    cursor: pointer;
+    background: #dbeafe;
+    color: #1e40af;
+    transition: background .1s;
+    user-select: none;
+    box-sizing: border-box;
+}}
+.b:hover {{ background: #bfdbfe; }}
+.sel {{
+    background: #4f46e5 !important;
+    color: white !important;
+    border-color: #4338ca !important;
+    box-shadow: inset 0 0 0 2px #a5b4fc;
+}}
+.brk {{
+    background: #dcfce7 !important;
+    color: #166534 !important;
+    border-color: #86efac !important;
+    opacity: .72;
+    cursor: default !important;
+    font-weight: 600 !important;
+}}
+.brk:hover {{ background: #dcfce7 !important; }}
+</style>
+<div class="grid">{''.join(cells)}</div>
+<script>
+function pick(i) {{
+    const u = new URL(window.parent.location.href);
+    u.searchParams.set('sel', i);
+    window.parent.location.href = u.toString();
+}}
+</script>
+"""
+    return html, grid_h
+
+
+# ── 메인 ──────────────────────────────────────────────────────────────────────
 def main():
-    st.set_page_config(page_title="영어 단어 벽돌깨기", page_icon="🧱", layout="wide")
+    st.set_page_config(
+        page_title="영어 단어 벽돌깨기",
+        page_icon="🧱",
+        layout="centered",
+    )
     init_state()
-    inject_css()
+    st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+
+    # query param 수신 (벽돌 클릭)
+    params = st.query_params
+    if "sel" in params:
+        try:
+            idx = int(params["sel"])
+            if 0 <= idx < TOTAL and not st.session_state.broken[idx]:
+                select_brick(idx)
+        except ValueError:
+            pass
+        st.query_params.clear()
+        st.rerun()
 
     broken_count = sum(st.session_state.broken)
-    score = round((broken_count / TOTAL) * 100)
-    game_done = broken_count == TOTAL
+    score        = round((broken_count / TOTAL) * 100)
+    pct          = score
+    game_done    = broken_count == TOTAL
 
-    # ── 헤더 ──
+    # ── 타이틀 ──
     st.title("🧱 영어 단어 벽돌깨기")
-    st.caption("단어 벽돌을 클릭하고 한국어 뜻을 입력해서 벽돌을 깨세요!")
+    st.caption("파란 벽돌 클릭 → 한국어 뜻 입력 → 맞추면 벽돌이 깨져요!")
 
     # ── 점수판 ──
-    col_s1, col_s2, col_s3, col_s4 = st.columns([1, 1, 1, 1])
-    with col_s1:
-        st.markdown(f"""
-        <div class="score-card">
-            <div class="score-num">{score}점</div>
-            <div class="score-label">현재 점수 (만점 100)</div>
-        </div>""", unsafe_allow_html=True)
-    with col_s2:
-        st.markdown(f"""
-        <div class="score-card">
-            <div class="score-num">{broken_count} / {TOTAL}</div>
-            <div class="score-label">맞춘 단어 수</div>
-        </div>""", unsafe_allow_html=True)
-    with col_s3:
-        st.markdown(f"""
-        <div class="score-card">
-            <div class="score-num">{TOTAL - broken_count}</div>
-            <div class="score-label">남은 단어 수</div>
-        </div>""", unsafe_allow_html=True)
-    with col_s4:
-        st.markdown(f"""
-        <div class="score-card">
-            <div class="score-num">{'🏆' if game_done else '🎯'}</div>
-            <div class="score-label">{'완료!' if game_done else '진행 중'}</div>
-        </div>""", unsafe_allow_html=True)
-
-    # ── 진행바 ──
     st.markdown(f"""
-    <div style="margin: 16px 0 4px; font-size:13px; color:#64748b;">진행률 {round((broken_count/TOTAL)*100)}%</div>
-    <div class="progress-wrap">
-        <div class="progress-inner" style="width:{round((broken_count/TOTAL)*100)}%"></div>
+    <div class="scoreboard">
+      <div class="sc"><div class="n">{score}<span style="font-size:14px">점</span></div><div class="l">현재 점수 / 100점</div></div>
+      <div class="sc"><div class="n">{broken_count}<span style="font-size:14px"> / {TOTAL}</span></div><div class="l">맞춘 단어</div></div>
+      <div class="sc"><div class="n">{TOTAL - broken_count}</div><div class="l">남은 단어</div></div>
     </div>
+    <div class="pw"><div class="pi" style="width:{pct}%"></div></div>
     """, unsafe_allow_html=True)
 
-    st.divider()
-
-    # ── 완료 배너 ──
+    # ── 완료 ──
     if game_done:
         st.markdown("""
-        <div class="complete-banner">
-            <h2>🎉 축하합니다! 완전 정복!</h2>
-            <p>단어 30개를 모두 맞혔어요! 최종 점수: <strong>100점 만점!</strong> 🏆</p>
+        <div class="done-banner">
+          <h2>🎉 완전 정복!</h2>
+          <p>30개 모두 맞혔어요! 최종 점수 <strong>100점 만점!</strong> 🏆</p>
         </div>""", unsafe_allow_html=True)
-        if st.button("🔄 다시 하기", use_container_width=False):
+        if st.button("🔄 처음부터 다시하기", use_container_width=True):
             reset_game()
             st.rerun()
         return
 
-    # ── 선택 정보 ──
+    # ── 선택 안내 ──
     sel = st.session_state.selected
     if sel is not None:
-        st.info(f"**선택된 단어:** `{WORDS[sel]['en']}` — 한국어 뜻을 아래에 입력하세요")
+        st.markdown(
+            f"<p style='font-size:13px;color:#4f46e5;font-weight:700;margin:0 0 6px'>"
+            f"▶ 선택: <u>{WORDS[sel]['en']}</u> — 한국어 뜻을 입력하세요</p>",
+            unsafe_allow_html=True,
+        )
     else:
         st.markdown(
-            "<p style='color:#64748b; font-size:14px;'>👇 파란 벽돌을 클릭해서 단어를 선택하세요</p>",
-            unsafe_allow_html=True
+            "<p style='font-size:13px;color:#94a3b8;margin:0 0 6px'>파란 벽돌을 클릭하세요</p>",
+            unsafe_allow_html=True,
         )
 
-    # ── 입력창 + 제출 ──
-    inp_col, btn_col = st.columns([5, 1])
-    with inp_col:
-        user_input = st.text_input(
-            "한국어 뜻 입력",
-            value=st.session_state.answer_input,
-            key=f"input_{st.session_state.input_key}",
-            placeholder="한국어 뜻을 입력하고 Enter 또는 확인 버튼을 누르세요",
-            label_visibility="collapsed",
-        )
-        st.session_state.answer_input = user_input
-    with btn_col:
-        st.markdown('<div class="submit-btn">', unsafe_allow_html=True)
-        if st.button("확인 ✓", use_container_width=True):
-            submit_answer()
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+    # ── 입력 폼 ──
+    with st.form(key=f"af_{st.session_state.input_key}", clear_on_submit=True):
+        c1, c2 = st.columns([5, 1])
+        with c1:
+            user_input = st.text_input(
+                "답",
+                placeholder="한국어 뜻 입력 후 Enter 또는 확인",
+                label_visibility="collapsed",
+            )
+        with c2:
+            submitted = st.form_submit_button("확인 ✓", use_container_width=True)
 
-    # Enter키 제출 처리
-    if user_input and user_input != st.session_state.get("_last_input", ""):
-        st.session_state["_last_input"] = user_input
+    if submitted:
+        submit_answer(user_input)
+        st.rerun()
 
     # ── 피드백 ──
     if st.session_state.feedback:
-        fb = st.session_state.feedback
-        ok = st.session_state.feedback_ok
-        css_cls = "fb-correct" if ok is True else ("fb-wrong" if ok is False else "fb-info")
-        st.markdown(f'<div class="{css_cls}">{fb}</div>', unsafe_allow_html=True)
+        cls = {
+            "correct": "fb-correct",
+            "wrong":   "fb-wrong",
+            "info":    "fb-info",
+        }.get(st.session_state.feedback_type, "fb-info")
+        st.markdown(
+            f'<div class="fb {cls}">{st.session_state.feedback}</div>',
+            unsafe_allow_html=True,
+        )
 
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    # ── 벽돌 그리드 ──
+    html_str, grid_h = brick_grid_html(st.session_state.broken, st.session_state.selected)
+    components.html(html_str, height=grid_h, scrolling=False)
 
-    # ── 벽돌 그리드 (5열) ──
-    COLS = 5
-    rows = [WORDS[i:i+COLS] for i in range(0, TOTAL, COLS)]
-    idx = 0
-    for row in rows:
-        cols = st.columns(COLS)
-        for c, word in zip(cols, row):
-            with c:
-                i = idx
-                if st.session_state.broken[i]:
-                    st.markdown(
-                        f'<div class="broken-brick">✓ {word["en"]}</div>',
-                        unsafe_allow_html=True
-                    )
-                elif st.session_state.selected == i:
-                    st.markdown(
-                        f'<div class="selected-brick">▶ {word["en"]}</div>',
-                        unsafe_allow_html=True
-                    )
-                    if st.button(f"선택됨", key=f"brick_{i}"):
-                        select_brick(i)
-                        st.rerun()
-                else:
-                    if st.button(word["en"], key=f"brick_{i}"):
-                        select_brick(i)
-                        st.rerun()
-            idx += 1
+    # ── 초기화 ──
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+    if st.button("🔄 초기화"):
+        reset_game()
+        st.rerun()
 
-    st.divider()
-    col_r1, col_r2 = st.columns([6, 1])
-    with col_r2:
-        if st.button("🔄 초기화", use_container_width=True):
-            reset_game()
-            st.rerun()
 
 if __name__ == "__main__":
     main()
